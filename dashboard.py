@@ -502,57 +502,59 @@ def create_reasons_chart(df, data_period_aggregated, start_day, end_day):
     try:
         reasons_labels = []
         reasons_values = []
-
         # Ищем начало секции "ОТКАЗЫ" в DataFrame
         start_index = None
         for i in range(df.shape[0]):
             if pd.notna(df.iloc[i, 0]) and "ОТКАЗЫ" in str(df.iloc[i, 0]).upper():
                 start_index = i + 1  # Начинаем с следующей строки после заголовка
                 break
-
         # Если не нашли секцию ОТКАЗЫ, начинаем с 37-й строки (как в оригинале)
         if start_index is None:
             start_index = 37
-
         # Ищем причины отказа
         for i in range(start_index, df.shape[0]):
             if i >= df.shape[0]:
                 break
-
             indicator_name = df.iloc[i, 0]
-
             # Пропускаем пустые строки
             if pd.isna(indicator_name) or str(indicator_name).strip() == "":
                 continue
-
-            # Останавливаемся, если дошли до следующей секции (например, начинающейся с заглавных букв)
             indicator_str = str(indicator_name).strip()
+            
+            # Пропускаем "Траты на таргет" и похожие показатели
+            if ('траты на таргет' in indicator_str.lower() or 
+                ('траты' in indicator_str.lower() and 'таргет' in indicator_str.lower()) or
+                'расходы на рекламу' in indicator_str.lower() or
+                'бюджет' in indicator_str.lower()):
+                continue
+            
+            # Останавливаемся, если дошли до следующей секции (например, начинающейся с заглавных букв)
             if (indicator_str.isupper() and len(indicator_str) > 3 and
                     not any(keyword in indicator_str.lower() for keyword in
                             ['заявку', 'купил', 'авто', 'не', 'отказ', 'ошибочно', 'телефон', 'без'])):
                 break
-
+            
             # Пытаемся найти этот показатель в агрегированных данных
             value = find_metric_value(data_period_aggregated, indicator_str)
             if value > 0:
                 reasons_labels.append(indicator_str)
                 reasons_values.append(value)
-
+        
         if not reasons_labels:
             return None
-
+        
         reasons_df = pd.DataFrame({
             "Причина отказа": reasons_labels,
             "Количество": reasons_values
         }).sort_values("Количество", ascending=True)
-
+        
         # Ограничиваем количество отображаемых причин для лучшей читаемости
         if len(reasons_df) > 10:
             reasons_df = reasons_df.tail(10)
-
+        
         textpositions = ['outside' if v < reasons_df["Количество"].max() * 0.3 else 'auto' for v in
                          reasons_df["Количество"]]
-
+        
         fig_reasons = go.Figure(go.Bar(
             y=reasons_df["Причина отказа"],
             x=reasons_df["Количество"],
@@ -561,18 +563,17 @@ def create_reasons_chart(df, data_period_aggregated, start_day, end_day):
             textposition=textpositions,
             marker_color='#1976D2'
         ))
-
+        
         fig_reasons.update_layout(
             title=f"Причины отказа (Дни {start_day}-{end_day})",
             height=max(400, len(reasons_df) * 40),  # Динамическая высота в зависимости от количества причин
             margin=dict(l=250, r=40, t=60, b=40)  # Увеличили левый отступ для длинных названий
         )
-
+        
         return fig_reasons
     except Exception as e:
         logger.error(f"Ошибка создания графика причин отказов: {e}")
         return None
-
 
 def main():
     """Основная функция приложения"""
